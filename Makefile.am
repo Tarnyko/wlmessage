@@ -13,7 +13,7 @@ CLEANFILES =
 bin_PROGRAMS += wlmessage
 
 wlmessage_LDFLAGS = -export-dynamic
-wlmessage_CPPFLAGS = $(AM_CPPFLAGS)
+wlmessage_CPPFLAGS = $(AM_CPPFLAGS) -Wno-unused-result
 wlmessage_CFLAGS = $(GCC_CFLAGS) $(PNG_CFLAGS) $(PIXMAN_CFLAGS) $(CLIENT_CFLAGS) $(CAIRO_EGL_CFLAGS) $(GLIB_CFLAGS)
 wlmessage_LDADD = $(DLOPEN_LIBS) $(PNG_LIBS) $(PIXMAN_LIBS) $(CLIENT_LIBS) $(CAIRO_EGL_LIBS) $(JPEG_LIBS) $(GLIB_LIBS) -lm
 
