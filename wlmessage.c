@@ -5,6 +5,7 @@
 #include <wayland-client.h>
 
 #include "window.h"
+#define MAX_LINES 7
 
 
 struct message_window {
@@ -13,6 +14,7 @@ struct message_window {
 	cairo_surface_t *surface;
 
 	char *title;
+	cairo_surface_t *icon;
 	char *message;
 	int buttons_nb;
 	struct wl_list button_list;
@@ -28,6 +30,49 @@ struct button {
 };
 
 struct message_window *message_window;
+
+
+int
+get_number_of_lines (char *text)
+{
+	int lines_num = 0;
+
+	gchar **lines = g_strsplit (text, "\n", -1);
+
+	while ((lines[lines_num] != NULL) && (lines_num < MAX_LINES))
+		lines_num++;
+
+	g_strfreev (lines);
+
+	return lines_num;
+}
+
+int
+get_max_length_of_lines (char *text)
+{
+	int lines_num = 0;
+	int length = 0;
+
+	gchar **lines = g_strsplit (text, "\n", -1);
+
+	while ((lines[lines_num] != NULL) && (lines_num < MAX_LINES)) {
+		if (strlen (lines[lines_num]) > length)
+			length = strlen (lines[lines_num]);
+		lines_num++;
+	}
+
+	g_strfreev (lines);
+
+	return length;
+}
+
+char **
+get_lines (char *text)
+{
+	gchar **lines = g_strsplit (text, "\n", -1);
+
+	return lines;
+}
 
 
 void
@@ -105,7 +150,7 @@ button_redraw_handler (struct widget *widget, void *data)
 	else
 		cairo_set_source_rgb (cr, 0.9, 0.9, 0.9);
 	cairo_fill (cr);
-	cairo_set_line_width (cr, 3);
+	cairo_set_line_width (cr, 10);
 	cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
 	cairo_stroke_preserve(cr);
 	cairo_select_font_face (cr, "sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
@@ -126,7 +171,7 @@ resize_handler (struct widget *widget, int32_t width, int32_t height, void *data
 	int x;
 
 	widget_get_allocation (widget, &allocation);
-	x = (allocation.width - message_window->buttons_nb*60)/2 + 10;
+	x = (allocation.width - message_window->buttons_nb*60)/2 + message_window->buttons_nb*10;
 
 	wl_list_for_each (button, &message_window->button_list, link) {
 		widget_set_allocation (button->widget, x, allocation.height-10, 60, 32); 
@@ -142,6 +187,8 @@ redraw_handler (struct widget *widget, void *data)
 	cairo_surface_t *surface;
 	cairo_t *cr;
 	cairo_text_extents_t extents;
+	int lines_nb;
+	char **lines;
 
 	widget_get_allocation (message_window->widget, &allocation);
 
@@ -156,25 +203,32 @@ redraw_handler (struct widget *widget, void *data)
 	cairo_set_source_rgba (cr, 0.5, 0.5, 0.5, 1.0);
 	cairo_fill (cr);
 
+	if (message_window->icon) {
+			cairo_move_to (cr,  allocation.x + 200, allocation.y + 200);
+			cairo_set_source_surface (cr, message_window->icon, 0.0, 0.0);
+			cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+			cairo_paint (cr);
+			cairo_set_source_surface (cr, surface, 0.0, 0.0);
+	}
+
 	cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
 	cairo_select_font_face (cr, "sans",
 	                        CAIRO_FONT_SLANT_NORMAL,
 	                        CAIRO_FONT_WEIGHT_NORMAL);
 	cairo_set_font_size (cr, 18);
 
-	gchar **messages = g_strsplit (message_window->message, "\n", 5);
-	int lines = 0;
-	while (messages[lines] != NULL)
-		lines++;
-		
+	lines_nb = get_number_of_lines (message_window->message);
+	lines = get_lines (message_window->message);
+
 	int i;
-	for (i = 0; i < lines; i++) {
-		cairo_text_extents (cr, messages[i], &extents);
+	for (i = 0; i < lines_nb; i++) {
+		cairo_text_extents (cr, lines[i], &extents);
 		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2,
-	        	           allocation.y + (allocation.height - lines * extents.height)/2 + i*(extents.height+10));
-		cairo_show_text (cr, messages[i]);
+	        	           allocation.y + (allocation.height - lines_nb * extents.height)/2 + i*(extents.height+10));
+		cairo_show_text (cr, lines[i]);
 	}
-	g_strfreev (messages);
+
+	g_strfreev (lines);
 
 	cairo_destroy (cr);
 }
@@ -202,8 +256,10 @@ message_window_add_button (char *button_desc)
 }
 
 void
-message_window_create (struct display *display, char *message, char *title, char *buttons)
+message_window_create (struct display *display, char *message, char *title, char *buttons, char *icon)
 {
+	unsigned int extended_width = 0;
+	int lines_nb = 0;
 	int have_buttons = 0;
 
 	message_window = xzalloc (sizeof *message_window);
@@ -230,11 +286,39 @@ message_window_create (struct display *display, char *message, char *title, char
 		have_buttons = 1;
 	}
 
+	if (icon) {
+		cairo_surface_t *icon_temp = cairo_image_surface_create_from_png (icon);
+		cairo_status_t status = cairo_surface_status (icon_temp);
+		if (status == CAIRO_STATUS_SUCCESS) {
+			message_window->icon = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 64, 64);
+			cairo_t *icon_cr = cairo_create (message_window->icon);
+			 /* rescale to 64x64 */
+			int width = cairo_image_surface_get_width (icon_temp);
+			int height = cairo_image_surface_get_height (icon_temp);
+			if (width != height != 64) {
+				double ratio = ((64.0/width) < (64.0/height) ? (64.0/width) : (64.0/height));
+				cairo_scale (icon_cr, ratio, ratio);
+			}
+			cairo_set_source_surface (icon_cr, icon_temp, 0.0, 0.0);
+			cairo_paint (icon_cr);
+			cairo_destroy (icon_cr);
+			cairo_surface_destroy (icon_temp);
+		}
+	}
+	else {
+		message_window->icon = NULL;
+	}
+
+	extended_width = (get_max_length_of_lines (message)) - 35;
+	lines_nb = get_number_of_lines (message);
+
 	window_set_user_data (message_window->window, message_window);
 	widget_set_redraw_handler (message_window->widget, redraw_handler);
 	widget_set_resize_handler (message_window->widget, resize_handler);
 
-	widget_schedule_resize (message_window->widget, 480, 280 + have_buttons*32);
+	widget_schedule_resize (message_window->widget,
+	                        480 + extended_width*10,
+	                        280 + lines_nb*16 + have_buttons*32);
 }
 
 void
@@ -242,6 +326,9 @@ message_window_destroy ()
 {
 	if (message_window->surface)
 		cairo_surface_destroy (message_window->surface);
+
+	if (message_window->icon)
+		cairo_surface_destroy (message_window->icon);
 
 	struct button *button, *tmp;
 	wl_list_for_each_safe (button, tmp, &message_window->button_list, link) {
@@ -259,7 +346,7 @@ message_window_destroy ()
 }
 
 void
-wlmessage_run (char *message, char *title, char *buttons)
+wlmessage_run (char *message, char *title, char *buttons, char *icon)
 {
 	struct display *display = NULL;
 
@@ -269,7 +356,7 @@ wlmessage_run (char *message, char *title, char *buttons)
 		return;
 	}
 	
-	message_window_create (display, message, title, buttons);
+	message_window_create (display, message, title, buttons, icon);
 	display_run (display);
 
 	message_window_destroy ();
@@ -314,6 +401,7 @@ main (int argc, char *argv[])
                         "    -title title\n"
                         "    -file filename\n"
                         "    -buttons string\n"
+                        "    -icon filename\n"
                         "\n");
 		return 0;
 	}
@@ -323,6 +411,7 @@ main (int argc, char *argv[])
 	char *message = NULL;
 	char *title = NULL;
 	char *buttons = NULL;
+	char *icon = NULL;
 
 	for (i = 1; i < argc ; i++) {
 
@@ -344,11 +433,17 @@ main (int argc, char *argv[])
 			i++; continue;
 		}
 
+		if (!strcmp (argv[i], "-icon")) {
+			if (argc >= i+2)
+				icon = strdup (argv[i+1]);
+			i++; continue;
+		}
+
 		if (!message)
 			message = strdup (argv[i]);
 	}
 
-	wlmessage_run (message, title, buttons);
+	wlmessage_run (message, title, buttons, icon);
 
 
 
