@@ -78,6 +78,7 @@ get_lines (char *text)
 void
 button_send_activate (int value)
 {
+	message_window_destroy ();
 	exit (value);
 }
 
@@ -204,8 +205,9 @@ redraw_handler (struct widget *widget, void *data)
 	cairo_fill (cr);
 
 	if (message_window->icon) {
-			cairo_move_to (cr,  allocation.x + 200, allocation.y + 200);
-			cairo_set_source_surface (cr, message_window->icon, 0.0, 0.0);
+			cairo_set_source_surface (cr, message_window->icon,
+			                              allocation.x + (allocation.width - 64.0)/2,
+			                              allocation.y);
 			cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
 			cairo_paint (cr);
 			cairo_set_source_surface (cr, surface, 0.0, 0.0);
@@ -224,7 +226,9 @@ redraw_handler (struct widget *widget, void *data)
 	for (i = 0; i < lines_nb; i++) {
 		cairo_text_extents (cr, lines[i], &extents);
 		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2,
-	        	           allocation.y + (allocation.height - lines_nb * extents.height)/2 + i*(extents.height+10));
+	        	           allocation.y + (allocation.height - lines_nb * extents.height)/2
+		                                + i*(extents.height+10)
+                                                - (!message_window->buttons_nb ? 0 : 32));
 		cairo_show_text (cr, lines[i]);
 	}
 
@@ -258,7 +262,7 @@ message_window_add_button (char *button_desc)
 void
 message_window_create (struct display *display, char *message, char *title, char *buttons, char *icon)
 {
-	unsigned int extended_width = 0;
+	int extended_width = 0;
 	int lines_nb = 0;
 	int have_buttons = 0;
 
@@ -310,15 +314,16 @@ message_window_create (struct display *display, char *message, char *title, char
 	}
 
 	extended_width = (get_max_length_of_lines (message)) - 35;
+	 if (extended_width < 0) extended_width = 0;
 	lines_nb = get_number_of_lines (message);
 
 	window_set_user_data (message_window->window, message_window);
 	widget_set_redraw_handler (message_window->widget, redraw_handler);
 	widget_set_resize_handler (message_window->widget, resize_handler);
 
-	widget_schedule_resize (message_window->widget,
+	window_schedule_resize (message_window->window,
 	                        480 + extended_width*10,
-	                        280 + lines_nb*16 + have_buttons*32);
+	                        280 + lines_nb*16 + (!message_window->buttons_nb ? 0 : 1)*32);
 }
 
 void
