@@ -2266,21 +2266,29 @@ frame_get_pointer_image_for_location(struct window_frame *frame,
 
 	switch (location) {
 	case THEME_LOCATION_RESIZING_TOP:
-		return CURSOR_TOP;
+		if (frame_resizable(frame->frame))
+			return CURSOR_TOP;
 	case THEME_LOCATION_RESIZING_BOTTOM:
-		return CURSOR_BOTTOM;
+		if (frame_resizable(frame->frame))
+			return CURSOR_BOTTOM;
 	case THEME_LOCATION_RESIZING_LEFT:
-		return CURSOR_LEFT;
+		if (frame_resizable(frame->frame))
+			return CURSOR_LEFT;
 	case THEME_LOCATION_RESIZING_RIGHT:
-		return CURSOR_RIGHT;
+		if (frame_resizable(frame->frame))
+			return CURSOR_RIGHT;
 	case THEME_LOCATION_RESIZING_TOP_LEFT:
-		return CURSOR_TOP_LEFT;
+		if (frame_resizable(frame->frame))
+			return CURSOR_TOP_LEFT;
 	case THEME_LOCATION_RESIZING_TOP_RIGHT:
-		return CURSOR_TOP_RIGHT;
+		if (frame_resizable(frame->frame))
+			return CURSOR_TOP_RIGHT;
 	case THEME_LOCATION_RESIZING_BOTTOM_LEFT:
-		return CURSOR_BOTTOM_LEFT;
+		if (frame_resizable(frame->frame))
+			return CURSOR_BOTTOM_LEFT;
 	case THEME_LOCATION_RESIZING_BOTTOM_RIGHT:
-		return CURSOR_BOTTOM_RIGHT;
+		if (frame_resizable(frame->frame))
+			return CURSOR_BOTTOM_RIGHT;
 	case THEME_LOCATION_EXTERIOR:
 	case THEME_LOCATION_TITLEBAR:
 	default:
@@ -2474,7 +2482,7 @@ frame_touch_up_handler(struct widget *widget,
 }
 
 struct widget *
-window_frame_create(struct window *window, void *data)
+window_frame_create(struct window *window, uint32_t type, uint32_t resizable, void *data)
 {
 	struct window_frame *frame;
 	uint32_t buttons;
@@ -2482,12 +2490,12 @@ window_frame_create(struct window *window, void *data)
 	if (window->type == TYPE_CUSTOM) {
 		buttons = FRAME_BUTTON_NONE;
 	} else {
-		buttons = FRAME_BUTTON_ALL;
+		buttons = type;
 	}
 
 	frame = xzalloc(sizeof *frame);
 	frame->frame = frame_create(window->display->theme, 0, 0,
-				    buttons, window->title);
+				    resizable, buttons, window->title);
 
 	frame->widget = window_add_widget(window, frame);
 	frame->child = widget_add_widget(frame->widget, data);
@@ -4614,7 +4622,7 @@ window_show_menu(struct display *display,
 	window_set_buffer_scale (menu->window, window_get_buffer_scale (parent));
 	window_set_buffer_transform (menu->window, window_get_buffer_transform (parent));
 	menu->frame = frame_create(window->display->theme, 0, 0,
-				   FRAME_BUTTON_NONE, NULL);
+				   1, FRAME_BUTTON_NONE, NULL);
 	fail_on_null(menu->frame);
 	menu->entries = entries;
 	menu->count = count;

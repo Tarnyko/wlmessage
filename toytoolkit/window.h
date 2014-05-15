@@ -194,6 +194,14 @@ enum cursor_type {
 	CURSOR_BLANK
 };
 
+enum {
+	FRAME_NONE = 0,
+	FRAME_CLOSE = 0x1,
+	FRAME_MAXIMIZE = 0x2,
+	FRAME_MINIMIZE = 0x4,
+	FRAME_ALL = 0x7
+};
+
 typedef void (*window_key_handler_t)(struct window *window, struct input *input,
 				     uint32_t time, uint32_t key, uint32_t unicode,
 				     enum wl_keyboard_key_state state, void *data);
@@ -515,7 +523,7 @@ void
 widget_set_use_cairo(struct widget *widget, int use_cairo);
 
 struct widget *
-window_frame_create(struct window *window, void *data);
+window_frame_create(struct window *window, uint32_t type, uint32_t resizable, void *data);
 
 void
 window_frame_set_child_size(struct widget *widget, int child_width,

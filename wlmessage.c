@@ -5,7 +5,7 @@
 #include <wayland-client.h>
 
 #include "window.h"
-#define MAX_LINES 7
+#define MAX_LINES 6
 
 
 struct message_window {
@@ -13,9 +13,9 @@ struct message_window {
 	struct widget *widget;
 	cairo_surface_t *surface;
 
+	char *message;
 	char *title;
 	cairo_surface_t *icon;
-	char *message;
 	int buttons_nb;
 	struct wl_list button_list;
 };
@@ -75,6 +75,8 @@ get_lines (char *text)
 }
 
 
+void message_window_destroy ();
+
 void
 button_send_activate (int value)
 {
@@ -94,13 +96,23 @@ button_click_handler(struct widget *widget,
 
 	if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
 		button->pressed = 1;
-	}
-	else {
+	} else {
 		button->pressed = 0;
-
-		if (button->focused)
-			button_send_activate (button->value);
+		button_send_activate (button->value);
 	}
+}
+
+static void
+button_touch_handler(struct widget *widget, struct input *input,
+		 uint32_t serial, uint32_t time, int32_t id,
+		 float tx, float ty, void *data)
+{
+	struct button *button = data;
+
+	widget_schedule_redraw (widget);
+
+	button->pressed = 1;
+	button_send_activate (button->value);
 }
 
 static int
@@ -151,7 +163,12 @@ button_redraw_handler (struct widget *widget, void *data)
 	else
 		cairo_set_source_rgb (cr, 0.9, 0.9, 0.9);
 	cairo_fill (cr);
-	cairo_set_line_width (cr, 10);
+	cairo_set_line_width (cr, 1);
+	cairo_rectangle (cr,
+			allocation.x,
+			allocation.y,
+			allocation.width,
+			allocation.height);
 	cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
 	cairo_stroke_preserve(cr);
 	cairo_select_font_face (cr, "sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
@@ -169,14 +186,27 @@ resize_handler (struct widget *widget, int32_t width, int32_t height, void *data
 	struct message_window *message_window = data;
 	struct button *button;
 	struct rectangle allocation;
+	int buttons_width, extended_width;
 	int x;
 
 	widget_get_allocation (widget, &allocation);
-	x = (allocation.width - message_window->buttons_nb*60)/2 + message_window->buttons_nb*10;
+
+	buttons_width = 0;
+	wl_list_for_each (button, &message_window->button_list, link) {
+		extended_width = strlen(button->caption) - 5;
+		if (extended_width < 0) extended_width = 0;
+		buttons_width += 60 + extended_width*10;
+	}
+
+	x = allocation.x + (width - buttons_width)/2
+	                 - (message_window->buttons_nb-1)*10;
 
 	wl_list_for_each (button, &message_window->button_list, link) {
-		widget_set_allocation (button->widget, x, allocation.height-10, 60, 32); 
-		x += 60+10;
+		extended_width = strlen(button->caption) - 5;
+		if (extended_width < 0) extended_width = 0;
+		widget_set_allocation (button->widget, x, allocation.y + height - 16 - 32,
+		                                       60 + extended_width*10, 32); 
+		x += 60 + extended_width*10 + 10;
 	}
 }
 
@@ -207,7 +237,7 @@ redraw_handler (struct widget *widget, void *data)
 	if (message_window->icon) {
 			cairo_set_source_surface (cr, message_window->icon,
 			                              allocation.x + (allocation.width - 64.0)/2,
-			                              allocation.y);
+			                              allocation.y + 10);
 			cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
 			cairo_paint (cr);
 			cairo_set_source_surface (cr, surface, 0.0, 0.0);
@@ -228,6 +258,7 @@ redraw_handler (struct widget *widget, void *data)
 		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2,
 	        	           allocation.y + (allocation.height - lines_nb * extents.height)/2
 		                                + i*(extents.height+10)
+		                                + (!message_window->icon ? 0 : 32)
                                                 - (!message_window->buttons_nb ? 0 : 32));
 		cairo_show_text (cr, lines[i]);
 	}
@@ -255,25 +286,36 @@ message_window_add_button (char *button_desc)
 	widget_set_enter_handler (button->widget, button_enter_handler);
 	widget_set_leave_handler (button->widget, button_leave_handler);
 	widget_set_button_handler (button->widget, button_click_handler);
+	widget_set_touch_down_handler (button->widget, button_touch_handler);
 
 	wl_list_insert (message_window->button_list.prev, &button->link);
 }
 
 void
-message_window_create (struct display *display, char *message, char *title, char *buttons, char *icon)
+message_window_create (struct display *display, char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon)
 {
+	int frame_type = FRAME_ALL;
 	int extended_width = 0;
 	int lines_nb = 0;
-	int have_buttons = 0;
+
+	if (titlebuttons) {
+		frame_type = FRAME_NONE;
+		if (strstr (titlebuttons, "Minimize"))
+			frame_type = frame_type | FRAME_MINIMIZE;
+		if (strstr (titlebuttons, "Maximize"))
+			frame_type = frame_type | FRAME_MAXIMIZE;
+		if (strstr (titlebuttons, "Close"))
+			frame_type = frame_type | FRAME_CLOSE;
+	}
 
 	message_window = xzalloc (sizeof *message_window);
 	message_window->window = window_create (display);
-	message_window->widget = window_frame_create (message_window->window, message_window);
+	message_window->widget = window_frame_create (message_window->window, frame_type, !noresize,  message_window);
 
 	message_window->message = message;
 
 	if (title)
-		message_window->title = title;
+		message_window->title = strdup (title);
 	else
 		message_window->title = strdup ("wlmessage");
 	window_set_title (message_window->window, message_window->title);
@@ -287,7 +329,6 @@ message_window_create (struct display *display, char *message, char *title, char
 			message_window->buttons_nb++;
 		}
 		g_strfreev (button_list);
-		have_buttons = 1;
 	}
 
 	if (icon) {
@@ -351,7 +392,7 @@ message_window_destroy ()
 }
 
 void
-wlmessage_run (char *message, char *title, char *buttons, char *icon)
+wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon)
 {
 	struct display *display = NULL;
 
@@ -361,7 +402,7 @@ wlmessage_run (char *message, char *title, char *buttons, char *icon)
 		return;
 	}
 	
-	message_window_create (display, message, title, buttons, icon);
+	message_window_create (display, message, title, titlebuttons, noresize, buttons, icon);
 	display_run (display);
 
 	message_window_destroy ();
@@ -403,9 +444,12 @@ main (int argc, char *argv[])
 		printf ("usage: wlmessage [-options] [message ...]\n"
                         "\n"
                         "where options include:\n"
-                        "    -title title\n"
                         "    -file filename\n"
                         "    -buttons string\n"
+                        "    -timeout secs\n"
+                        "    -title title\n"
+                        "    -titlebuttons string\n"
+                        "    -no-resize\n"
                         "    -icon filename\n"
                         "\n");
 		return 0;
@@ -414,17 +458,14 @@ main (int argc, char *argv[])
 
 	int i;
 	char *message = NULL;
-	char *title = NULL;
 	char *buttons = NULL;
+	char *title = NULL;
+	char *titlebuttons = NULL;
 	char *icon = NULL;
+	int timeout = 0;
+	int noresize = 0;
 
 	for (i = 1; i < argc ; i++) {
-
-		if (!strcmp (argv[i], "-title")) {
-			if (argc >= i+2)
-				title = strdup (argv[i+1]);
-			i++; continue;
-		}
 
 		if (!strcmp (argv[i], "-file")) {
 			if (argc >= i+2)
@@ -434,13 +475,36 @@ main (int argc, char *argv[])
 
 		if (!strcmp (argv[i], "-buttons")) {
 			if (argc >= i+2)
-				buttons = strdup (argv[i+1]);
+				buttons = argv[i+1];
 			i++; continue;
+		}
+
+		if (!strcmp (argv[i], "-title")) {
+			if (argc >= i+2)
+				title = argv[i+1];
+			i++; continue;
+		}
+
+		if (!strcmp (argv[i], "-titlebuttons")) {
+			if (argc >= i+2)
+				titlebuttons = argv[i+1];
+			i++; continue;
+		}
+
+		if (!strcmp (argv[i], "-no-resize")) {
+			noresize = 1;
+			continue;
 		}
 
 		if (!strcmp (argv[i], "-icon")) {
 			if (argc >= i+2)
-				icon = strdup (argv[i+1]);
+				icon = argv[i+1];
+			i++; continue;
+		}
+
+		if (!strcmp (argv[i], "-timeout")) {
+			if (argc >= i+2)
+				timeout = atoi (argv[i+1]);
 			i++; continue;
 		}
 
@@ -448,7 +512,7 @@ main (int argc, char *argv[])
 			message = strdup (argv[i]);
 	}
 
-	wlmessage_run (message, title, buttons, icon);
+	wlmessage_run (message, title, titlebuttons, noresize, buttons, icon);
 
 
 

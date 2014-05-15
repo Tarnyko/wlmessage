@@ -82,6 +82,7 @@ struct frame_touch {
 
 struct frame {
 	int32_t width, height;
+	uint32_t resizable;
 	char *title;
 	uint32_t flags;
 	struct theme *theme;
@@ -298,7 +299,7 @@ frame_destroy(struct frame *frame)
 }
 
 struct frame *
-frame_create(struct theme *t, int32_t width, int32_t height, uint32_t buttons,
+frame_create(struct theme *t, int32_t width, int32_t height, uint32_t resizable, uint32_t buttons,
 	     const char *title)
 {
 	struct frame *frame;
@@ -310,6 +311,7 @@ frame_create(struct theme *t, int32_t width, int32_t height, uint32_t buttons,
 
 	frame->width = width;
 	frame->height = height;
+	frame->resizable = resizable;
 	frame->flags = 0;
 	frame->theme = t;
 	frame->status = FRAME_STATUS_REPAINT;
@@ -592,6 +594,12 @@ frame_status(struct frame *frame)
 	return frame->status;
 }
 
+uint32_t
+frame_resizable(struct frame *frame)
+{
+	return frame->resizable;
+}
+
 void
 frame_status_clear(struct frame *frame, enum frame_status status)
 {
@@ -688,7 +696,8 @@ frame_pointer_button_press(struct frame *frame, struct frame_pointer *pointer,
 			case THEME_LOCATION_RESIZING_TOP_RIGHT:
 			case THEME_LOCATION_RESIZING_BOTTOM_LEFT:
 			case THEME_LOCATION_RESIZING_BOTTOM_RIGHT:
-				frame->status |= FRAME_STATUS_RESIZE;
+				if (frame->resizable)
+					frame->status |= FRAME_STATUS_RESIZE;
 
 				frame_pointer_button_destroy(button);
 				break;
@@ -815,7 +824,8 @@ frame_touch_down(struct frame *frame, void *data, int32_t id, int x, int y)
 	case THEME_LOCATION_RESIZING_TOP_RIGHT:
 	case THEME_LOCATION_RESIZING_BOTTOM_LEFT:
 	case THEME_LOCATION_RESIZING_BOTTOM_RIGHT:
-		frame->status |= FRAME_STATUS_RESIZE;
+		if (frame->resizable)
+			frame->status |= FRAME_STATUS_RESIZE;
 		break;
 	default:
 		break;

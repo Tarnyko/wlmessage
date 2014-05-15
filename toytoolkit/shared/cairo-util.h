@@ -124,7 +124,7 @@ enum frame_button_state {
 
 struct frame *
 frame_create(struct theme *t, int32_t width, int32_t height, uint32_t buttons,
-	     const char *title);
+            uint32_t resizable, const char *title);
 
 void
 frame_destroy(struct frame *frame);
@@ -170,6 +170,9 @@ frame_get_shadow_margin(struct frame *frame);
 
 uint32_t
 frame_status(struct frame *frame);
+
+uint32_t
+frame_resizable(struct frame *frame);
 
 void
 frame_status_clear(struct frame *frame, enum frame_status status);
