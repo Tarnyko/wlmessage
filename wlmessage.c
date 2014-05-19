@@ -30,6 +30,7 @@ struct button {
 };
 
 struct message_window *message_window;
+int default_value;
 
 
 int
@@ -103,15 +104,26 @@ button_click_handler(struct widget *widget,
 }
 
 static void
-button_touch_handler(struct widget *widget, struct input *input,
+button_touch_down_handler(struct widget *widget, struct input *input,
 		 uint32_t serial, uint32_t time, int32_t id,
 		 float tx, float ty, void *data)
 {
 	struct button *button = data;
 
+	button->focused = 1;
+	widget_schedule_redraw (widget);
+}
+
+static void
+button_touch_up_handler(struct widget *widget, struct input *input,
+		 uint32_t serial, uint32_t time, int32_t id,
+		 void *data)
+{
+	struct button *button = data;
+
+	button->focused = 0;
 	widget_schedule_redraw (widget);
 
-	button->pressed = 1;
 	button_send_activate (button->value);
 }
 
@@ -268,6 +280,22 @@ redraw_handler (struct widget *widget, void *data)
 	cairo_destroy (cr);
 }
 
+static void
+key_handler (struct window *window, struct input *input, uint32_t time,
+		 uint32_t key, uint32_t sym, enum wl_keyboard_key_state state,
+		 void *data)
+{
+	struct message_window *message_window = data;
+
+	if (state == WL_KEYBOARD_KEY_STATE_RELEASED)
+		return;
+
+	if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+		message_window_destroy ();
+		exit (default_value);
+	}
+}
+
 void
 message_window_add_button (char *button_desc)
 {
@@ -286,13 +314,14 @@ message_window_add_button (char *button_desc)
 	widget_set_enter_handler (button->widget, button_enter_handler);
 	widget_set_leave_handler (button->widget, button_leave_handler);
 	widget_set_button_handler (button->widget, button_click_handler);
-	widget_set_touch_down_handler (button->widget, button_touch_handler);
+	widget_set_touch_down_handler (button->widget, button_touch_down_handler);
+	widget_set_touch_up_handler (button->widget, button_touch_up_handler);
 
 	wl_list_insert (message_window->button_list.prev, &button->link);
 }
 
 void
-message_window_create (struct display *display, char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon)
+message_window_create (struct display *display, char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon, char *deflt)
 {
 	int frame_type = FRAME_ALL;
 	int extended_width = 0;
@@ -331,6 +360,15 @@ message_window_create (struct display *display, char *message, char *title, char
 		g_strfreev (button_list);
 	}
 
+	default_value = 0;
+	if (buttons && deflt) {
+		struct button *button;
+		wl_list_for_each (button, &message_window->button_list, link) {
+			if (!strcmp(button->caption, deflt))
+				default_value = button->value;
+		}
+	}
+
 	if (icon) {
 		cairo_surface_t *icon_temp = cairo_image_surface_create_from_png (icon);
 		cairo_status_t status = cairo_surface_status (icon_temp);
@@ -359,6 +397,7 @@ message_window_create (struct display *display, char *message, char *title, char
 	lines_nb = get_number_of_lines (message);
 
 	window_set_user_data (message_window->window, message_window);
+	window_set_key_handler (message_window->window, key_handler);
 	widget_set_redraw_handler (message_window->widget, redraw_handler);
 	widget_set_resize_handler (message_window->widget, resize_handler);
 
@@ -392,7 +431,7 @@ message_window_destroy ()
 }
 
 void
-wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon)
+wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon, int timeout, char *deflt)
 {
 	struct display *display = NULL;
 
@@ -401,8 +440,11 @@ wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, cha
 		fprintf (stderr, "Failed to connect to a Wayland compositor !\n");
 		return;
 	}
-	
-	message_window_create (display, message, title, titlebuttons, noresize, buttons, icon);
+
+	if (timeout)
+		display_set_timeout (display, timeout);
+
+	message_window_create (display, message, title, titlebuttons, noresize, buttons, icon, deflt);
 	display_run (display);
 
 	message_window_destroy ();
@@ -444,13 +486,14 @@ main (int argc, char *argv[])
 		printf ("usage: wlmessage [-options] [message ...]\n"
                         "\n"
                         "where options include:\n"
-                        "    -file filename\n"
-                        "    -buttons string\n"
-                        "    -timeout secs\n"
-                        "    -title title\n"
-                        "    -titlebuttons string\n"
-                        "    -no-resize\n"
-                        "    -icon filename\n"
+                        "    -file filename              file to read message from\n"
+                        "    -buttons string             comma-separated list of label:exitcode\n"
+                        "    -default button             button to activate if Return is pressed\n"
+                        "    -timeout secs               exit with status 0 after \"secs\" seconds\n"
+                        "    -title title                window has this title\n"
+                        "    -titlebuttons string        comma-separated list of \"Minimize, Maximize, Close, None\"\n"
+                        "    -no-resize                  window is not resizable\n"
+                        "    -icon filename              window shows this PNG icon\n"
                         "\n");
 		return 0;
 	}
@@ -459,6 +502,7 @@ main (int argc, char *argv[])
 	int i;
 	char *message = NULL;
 	char *buttons = NULL;
+	char *deflt = NULL;
 	char *title = NULL;
 	char *titlebuttons = NULL;
 	char *icon = NULL;
@@ -476,6 +520,12 @@ main (int argc, char *argv[])
 		if (!strcmp (argv[i], "-buttons")) {
 			if (argc >= i+2)
 				buttons = argv[i+1];
+			i++; continue;
+		}
+
+		if (!strcmp (argv[i], "-default")) {
+			if (argc >= i+2)
+				deflt = argv[i+1];
 			i++; continue;
 		}
 
@@ -512,7 +562,7 @@ main (int argc, char *argv[])
 			message = strdup (argv[i]);
 	}
 
-	wlmessage_run (message, title, titlebuttons, noresize, buttons, icon);
+	wlmessage_run (message, title, titlebuttons, noresize, buttons, icon, timeout, deflt);
 
 
 

@@ -35,6 +35,7 @@
 #include <assert.h>
 #include <time.h>
 #include <cairo.h>
+#include <sys/time.h>
 #include <sys/mman.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
@@ -103,6 +104,9 @@ struct display {
 
 	int epoll_fd;
 	struct wl_list deferred_list;
+
+	int timeout;
+	struct timeval time;
 
 	int running;
 
@@ -5274,6 +5278,8 @@ display_create(int *argc, char *argv[])
 	wl_list_init(&d->output_list);
 	wl_list_init(&d->global_list);
 
+	d->timeout = 0;
+
 	d->workspace = 0;
 	d->workspace_count = 1;
 
@@ -5371,6 +5377,18 @@ display_destroy(struct display *display)
 
 	wl_display_disconnect(display->display);
 	free(display);
+}
+
+void
+display_set_timeout(struct display *display, int timeout)
+{
+	display->timeout = timeout;
+}
+
+int
+display_get_timeout(struct display *display)
+{
+	return display->timeout;
 }
 
 void
@@ -5498,7 +5516,10 @@ display_run(struct display *display)
 {
 	struct task *task;
 	struct epoll_event ep[16];
+	struct timeval current_time;
 	int i, count, ret;
+
+	gettimeofday(&display->time, NULL);
 
 	display->running = 1;
 	while (1) {
@@ -5507,6 +5528,13 @@ display_run(struct display *display)
 					    struct task, link);
 			wl_list_remove(&task->link);
 			task->run(task, 0);
+		}
+
+		if (display->timeout) {
+			gettimeofday(&current_time, NULL);
+
+			if ((current_time.tv_sec - display->time.tv_sec) >= display->timeout)
+				return;
 		}
 
 		wl_display_dispatch_pending(display->display);
@@ -5527,7 +5555,7 @@ display_run(struct display *display)
 		}
 
 		count = epoll_wait(display->epoll_fd,
-				   ep, ARRAY_LENGTH(ep), -1);
+				   ep, ARRAY_LENGTH(ep), 200);
 		for (i = 0; i < count; i++) {
 			task = ep[i].data.ptr;
 			task->run(task, ep[i].events);

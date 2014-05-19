@@ -70,6 +70,12 @@ void
 display_destroy(struct display *display);
 
 void
+display_set_timeout(struct display *display, int timeout);
+
+int
+display_get_timeout(struct display *display);
+
+void
 display_set_user_data(struct display *display, void *data);
 
 void *
