@@ -25,5 +25,6 @@ wlmessage_SOURCES =					\
 	toytoolkit/shared/os-compatibility.c		\
 	toytoolkit/xdg-shell-protocol.c			\
 	toytoolkit/text-cursor-position-protocol.c	\
+	toytoolkit/text-protocol.c			\
 	toytoolkit/workspaces-protocol.c		\
 	toytoolkit/window.c

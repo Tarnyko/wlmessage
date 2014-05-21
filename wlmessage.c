@@ -1,10 +1,12 @@
 /* Copyright © 2014 Manuel Bachmann */
 
+#include <linux/input.h>
 #include <string.h>
 #include <glib.h>
 #include <wayland-client.h>
 
 #include "window.h"
+#include "text-client-protocol.h"
 #define MAX_LINES 6
 
 
@@ -16,6 +18,7 @@ struct message_window {
 	char *message;
 	char *title;
 	cairo_surface_t *icon;
+	struct entry *entry;
 	int buttons_nb;
 	struct wl_list button_list;
 };
@@ -29,7 +32,20 @@ struct button {
 	int value;
 };
 
+struct entry {
+	struct widget *widget;
+	int active;
+
+	struct wl_text_input *text_input;
+	char *text;
+	int cursor_pos;
+	int cursor_anchor;
+};
+
+void message_window_destroy ();
+
 struct message_window *message_window;
+struct wl_text_input_manager *text_input_manager;
 int default_value;
 
 
@@ -76,11 +92,148 @@ get_lines (char *text)
 }
 
 
-void message_window_destroy ();
+static void
+text_input_enter(void *data,
+                 struct wl_text_input *text_input,
+                 struct wl_surface *surface)
+{
+}
+
+static void
+text_input_leave(void *data,
+                 struct wl_text_input *text_input)
+{
+}
+
+static void
+text_input_modifiers_map(void *data,
+                         struct wl_text_input *text_input,
+                         struct wl_array *map)
+{
+}
+
+static void
+text_input_input_panel_state(void *data,
+                             struct wl_text_input *text_input,
+                             uint32_t state)
+{
+}
+
+static void
+text_input_preedit_string(void *data,
+                          struct wl_text_input *text_input,
+                          uint32_t serial,
+                          const char *text,
+                          const char *commit)
+{
+	struct entry *entry = data;
+	char *new_text;
+
+	if (entry->cursor_pos >= 20)
+		return;
+
+	new_text = malloc (strlen(entry->text) + 1);
+	strncpy (new_text, entry->text, entry->cursor_pos);
+	strcpy (new_text+entry->cursor_pos, text+(strlen(text)-1));
+	strcpy (new_text+entry->cursor_pos+1, entry->text+entry->cursor_pos);
+	free (entry->text);
+	entry->text = new_text;
+	entry->cursor_pos++;
+
+	widget_schedule_redraw (entry->widget);
+}
+
+static void
+text_input_preedit_styling(void *data,
+                           struct wl_text_input *text_input,
+                           uint32_t index,
+                           uint32_t length,
+                           uint32_t style)
+{
+}
+
+static void
+text_input_preedit_cursor(void *data,
+                          struct wl_text_input *text_input,
+                          int32_t index)
+{
+}
+
+static void
+text_input_commit_string(void *data,
+                         struct wl_text_input *text_input,
+                         uint32_t serial,
+                         const char *text)
+{
+}
+
+static void
+text_input_cursor_position(void *data,
+                           struct wl_text_input *text_input,
+                           int32_t index,
+                           int32_t anchor)
+{
+}
+
+static void
+text_input_keysym(void *data,
+                  struct wl_text_input *text_input,
+                  uint32_t serial,
+                  uint32_t time,
+                  uint32_t sym,
+                  uint32_t state,
+                  uint32_t modifiers)
+{
+	struct entry *entry = data;
+
+	if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
+		return;
+
+	if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+		fprintf (stdout, entry->text);
+		message_window_destroy ();
+		exit (default_value);
+	}
+}
+
+static void
+text_input_language(void *data,
+                    struct wl_text_input *text_input,
+                    uint32_t serial,
+                    const char *language)
+{
+}
+
+static void
+text_input_text_direction(void *data,
+                          struct wl_text_input *text_input,
+                          uint32_t serial,
+                          uint32_t direction)
+{
+}
+
+static const struct wl_text_input_listener text_input_listener = {
+	text_input_enter,
+	text_input_leave,
+	text_input_modifiers_map,
+	text_input_input_panel_state,
+	text_input_preedit_string,
+	text_input_preedit_styling,
+	text_input_preedit_cursor,
+	text_input_commit_string,
+	text_input_cursor_position,
+	NULL,
+	text_input_keysym,
+	text_input_language,
+	text_input_text_direction
+};
+
 
 void
 button_send_activate (int value)
 {
+	if (message_window->entry)
+		fprintf (stdout, message_window->entry->text);
 	message_window_destroy ();
 	exit (value);
 }
@@ -193,15 +346,131 @@ button_redraw_handler (struct widget *widget, void *data)
 }
 
 static void
+entry_click_handler(struct widget *widget,
+		struct input *input, uint32_t time,
+		uint32_t button,
+		enum wl_pointer_button_state state, void *data)
+{
+	struct entry *entry = data;
+
+	widget_schedule_redraw (widget);
+
+	if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT) {
+		if (!entry->text_input) {
+			entry->text_input = wl_text_input_manager_create_text_input (text_input_manager);
+			wl_text_input_add_listener (entry->text_input, &text_input_listener, entry);
+		}
+
+		struct wl_seat *seat = input_get_seat (input);
+		struct wl_surface *surface = window_get_wl_surface (message_window->window);
+		wl_text_input_show_input_panel (entry->text_input);
+		wl_text_input_activate (entry->text_input, seat, surface);
+
+		entry->active = 1;
+	}
+}
+
+static void
+entry_touch_handler(struct widget *widget, struct input *input,
+		 uint32_t serial, uint32_t time, int32_t id,
+		 float tx, float ty, void *data)
+{
+	struct entry *entry = data;
+
+	widget_schedule_redraw (widget);
+
+	if (!entry->text_input) {
+		entry->text_input = wl_text_input_manager_create_text_input (text_input_manager);
+		wl_text_input_add_listener (entry->text_input, &text_input_listener, entry);
+	}
+
+	struct wl_seat *seat = input_get_seat (input);
+	struct wl_surface *surface = window_get_wl_surface (message_window->window);
+	wl_text_input_show_input_panel (entry->text_input);
+	wl_text_input_activate (entry->text_input, seat, surface);
+
+	entry->active = 1;
+}
+
+static int
+entry_motion_handler(struct widget *widget,
+		struct input *input, uint32_t time,
+		float x, float y, void *data)
+{
+	return CURSOR_IBEAM;
+}
+
+static void
+entry_redraw_handler (struct widget *widget, void *data)
+{
+	struct entry *entry = data;
+	struct rectangle allocation;
+	cairo_t *cr;
+	cairo_text_extents_t extents;
+
+	widget_get_allocation (widget, &allocation);
+
+	cr = widget_cairo_create (message_window->widget);
+	cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+	cairo_rectangle (cr,
+	                allocation.x,
+	                allocation.y,
+	                allocation.width,
+	                allocation.height);
+	cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+	cairo_fill (cr);
+	cairo_set_line_width (cr, 1);
+	cairo_rectangle (cr,
+			allocation.x,
+			allocation.y,
+			allocation.width,
+			allocation.height);
+	if (entry->active)
+		cairo_set_source_rgb (cr, 0.0, 0.0, 1.0);
+	else
+		cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+	cairo_stroke_preserve(cr);
+
+	cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
+	cairo_select_font_face (cr, "sans",
+	                        CAIRO_FONT_SLANT_NORMAL,
+	                        CAIRO_FONT_WEIGHT_NORMAL);
+	cairo_set_font_size (cr, 14);
+	cairo_text_extents (cr, entry->text, &extents);
+	cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2,
+	        	   allocation.y + (allocation.height - extents.height)/2 + 10);
+	cairo_show_text (cr, entry->text);
+
+	if (entry->active) {
+		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2 + 10*entry->cursor_pos,
+		        	   allocation.y + (allocation.height - extents.height)/2 + 15);
+		cairo_line_to(cr, allocation.x + (allocation.width - extents.width)/2 + 10*entry->cursor_pos,
+		        	   allocation.y + (allocation.height - extents.height)/2 - 5);
+		cairo_stroke(cr);
+	}
+
+	cairo_destroy (cr);
+}
+
+static void
 resize_handler (struct widget *widget, int32_t width, int32_t height, void *data)
 {
 	struct message_window *message_window = data;
+	struct entry *entry;
 	struct button *button;
 	struct rectangle allocation;
 	int buttons_width, extended_width;
 	int x;
 
 	widget_get_allocation (widget, &allocation);
+
+	x = allocation.x + (width - 200)/2;
+
+	if (message_window->entry) {
+		entry = message_window->entry;
+		widget_set_allocation (entry->widget, x, allocation.y + height - 16*2 - 32*2,
+		                                      200, 32);
+	}
 
 	buttons_width = 0;
 	wl_list_for_each (button, &message_window->button_list, link) {
@@ -286,14 +555,85 @@ key_handler (struct window *window, struct input *input, uint32_t time,
 		 void *data)
 {
 	struct message_window *message_window = data;
+	struct entry *entry = message_window->entry;
+	char *new_text;
+	char text[16];
 
 	if (state == WL_KEYBOARD_KEY_STATE_RELEASED)
 		return;
 
 	if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+		if (entry)
+			fprintf (stdout, entry->text);
 		message_window_destroy ();
 		exit (default_value);
 	}
+
+	if (entry && entry->active) {
+		switch (sym) {
+			case XKB_KEY_BackSpace:
+				if (entry->cursor_pos == 0)
+					break;
+				new_text = malloc (strlen(entry->text) - 1);
+				strncpy (new_text, entry->text, entry->cursor_pos - 1);
+				strcpy (new_text+entry->cursor_pos-1, entry->text+entry->cursor_pos);
+				free (entry->text);
+				entry->text = new_text;
+				entry->cursor_pos--;
+				break;
+			case XKB_KEY_Delete:
+				if (entry->cursor_pos == strlen (entry->text))
+					break;
+				new_text = malloc (strlen(entry->text) - 1);
+				strncpy (new_text, entry->text, entry->cursor_pos);
+				strcpy (new_text+entry->cursor_pos, entry->text+entry->cursor_pos+1);
+				free (entry->text);
+				entry->text = new_text;
+			case XKB_KEY_Left:
+				if (entry->cursor_pos != 0)
+					entry->cursor_pos--;
+				break;
+			case XKB_KEY_Right:
+				if (entry->cursor_pos != strlen (entry->text))
+					entry->cursor_pos++;
+				break;
+			case XKB_KEY_Tab:
+				break;
+			default:
+				if (entry->cursor_pos >= 20)
+					break;
+				if (xkb_keysym_to_utf8 (sym, text, sizeof(text)) <= 0)
+					break;
+				new_text = malloc (strlen(entry->text) + 1);
+				strncpy (new_text, entry->text, entry->cursor_pos);
+				strcpy (new_text+entry->cursor_pos, text);
+				strcpy (new_text+entry->cursor_pos+strlen(text), entry->text+entry->cursor_pos);
+				free (entry->text);
+				entry->text = new_text;
+				entry->cursor_pos++;
+		}
+		widget_schedule_redraw(entry->widget);
+	}
+}
+
+void
+message_window_add_entry (char *textfield)
+{
+	struct entry *entry;
+
+	entry = xzalloc (sizeof *entry);
+	entry->widget = widget_add_widget (message_window->widget, entry);
+	entry->text = strdup (textfield);
+	entry->cursor_pos = strlen (entry->text);
+	entry->cursor_anchor = entry->cursor_pos;
+	entry->active = 0;
+
+	message_window->entry = entry;
+
+	widget_set_redraw_handler (entry->widget, entry_redraw_handler);
+	widget_set_motion_handler (entry->widget, entry_motion_handler);
+	widget_set_button_handler (entry->widget, entry_click_handler);
+	widget_set_touch_down_handler (entry->widget, entry_touch_handler);
 }
 
 void
@@ -321,7 +661,7 @@ message_window_add_button (char *button_desc)
 }
 
 void
-message_window_create (struct display *display, char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon, char *deflt)
+message_window_create (struct display *display, char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon, char *deflt, char *textfield)
 {
 	int frame_type = FRAME_ALL;
 	int extended_width = 0;
@@ -329,9 +669,9 @@ message_window_create (struct display *display, char *message, char *title, char
 
 	if (titlebuttons) {
 		frame_type = FRAME_NONE;
-		if (strstr (titlebuttons, "Minimize"))
+		if (strstr (titlebuttons, "Min"))
 			frame_type = frame_type | FRAME_MINIMIZE;
-		if (strstr (titlebuttons, "Maximize"))
+		if (strstr (titlebuttons, "Max"))
 			frame_type = frame_type | FRAME_MAXIMIZE;
 		if (strstr (titlebuttons, "Close"))
 			frame_type = frame_type | FRAME_CLOSE;
@@ -369,6 +709,12 @@ message_window_create (struct display *display, char *message, char *title, char
 		}
 	}
 
+	if (textfield) {
+		message_window_add_entry (textfield);
+	} else {
+		message_window->entry = NULL;
+	}
+
 	if (icon) {
 		cairo_surface_t *icon_temp = cairo_image_surface_create_from_png (icon);
 		cairo_status_t status = cairo_surface_status (icon_temp);
@@ -403,7 +749,8 @@ message_window_create (struct display *display, char *message, char *title, char
 
 	window_schedule_resize (message_window->window,
 	                        480 + extended_width*10,
-	                        280 + lines_nb*16 + (!message_window->buttons_nb ? 0 : 1)*32);
+	                        280 + lines_nb*16 + (!message_window->entry ? 0 : 1)*32
+	                                          + (!message_window->buttons_nb ? 0 : 1)*32);
 }
 
 void
@@ -415,10 +762,20 @@ message_window_destroy ()
 	if (message_window->icon)
 		cairo_surface_destroy (message_window->icon);
 
+	struct entry *entry;
+	if (message_window->entry) {
+		entry = message_window->entry;
+		if (entry->text_input)
+			wl_text_input_destroy (entry->text_input);
+		widget_destroy(entry->widget);
+		free (entry->text);
+		free (entry);
+	}
+
 	struct button *button, *tmp;
 	wl_list_for_each_safe (button, tmp, &message_window->button_list, link) {
-		wl_list_remove(&button->link);
-		widget_destroy(button->widget);
+		wl_list_remove (&button->link);
+		widget_destroy (button->widget);
 		free (button->caption);
 		free (button);
 	}
@@ -430,8 +787,17 @@ message_window_destroy ()
 	free (message_window);
 }
 
+static void
+global_handler(struct display *display, uint32_t name,
+	       const char *interface, uint32_t version, void *data)
+{
+	if (!strcmp(interface, "wl_text_input_manager")) {
+		text_input_manager = display_bind (display, name, &wl_text_input_manager_interface, 1);
+	}
+}
+
 void
-wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon, int timeout, char *deflt)
+wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, char *buttons, char *icon, int timeout, char *deflt, char *textfield)
 {
 	struct display *display = NULL;
 
@@ -444,7 +810,8 @@ wlmessage_run (char *message, char *title, char *titlebuttons, int noresize, cha
 	if (timeout)
 		display_set_timeout (display, timeout);
 
-	message_window_create (display, message, title, titlebuttons, noresize, buttons, icon, deflt);
+	message_window_create (display, message, title, titlebuttons, noresize, buttons, icon, deflt, textfield);
+	display_set_global_handler (display, global_handler);
 	display_run (display);
 
 	message_window_destroy ();
@@ -489,9 +856,10 @@ main (int argc, char *argv[])
                         "    -file filename              file to read message from\n"
                         "    -buttons string             comma-separated list of label:exitcode\n"
                         "    -default button             button to activate if Return is pressed\n"
+                        "    -textfield text             text field with default text\n"
                         "    -timeout secs               exit with status 0 after \"secs\" seconds\n"
                         "    -title title                window has this title\n"
-                        "    -titlebuttons string        comma-separated list of \"Minimize, Maximize, Close, None\"\n"
+                        "    -titlebuttons string        comma-separated list of \"Min, Max, Close, None\"\n"
                         "    -no-resize                  window is not resizable\n"
                         "    -icon filename              window shows this PNG icon\n"
                         "\n");
@@ -503,6 +871,7 @@ main (int argc, char *argv[])
 	char *message = NULL;
 	char *buttons = NULL;
 	char *deflt = NULL;
+	char *textfield = NULL;
 	char *title = NULL;
 	char *titlebuttons = NULL;
 	char *icon = NULL;
@@ -526,6 +895,12 @@ main (int argc, char *argv[])
 		if (!strcmp (argv[i], "-default")) {
 			if (argc >= i+2)
 				deflt = argv[i+1];
+			i++; continue;
+		}
+
+		if (!strcmp (argv[i], "-textfield")) {
+			if (argc >= i+2)
+				textfield = argv[i+1];
 			i++; continue;
 		}
 
@@ -562,8 +937,7 @@ main (int argc, char *argv[])
 			message = strdup (argv[i]);
 	}
 
-	wlmessage_run (message, title, titlebuttons, noresize, buttons, icon, timeout, deflt);
-
+	wlmessage_run (message, title, titlebuttons, noresize, buttons, icon, timeout, deflt, textfield);
 
 
 	return 0;
