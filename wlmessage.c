@@ -443,6 +443,7 @@ entry_redraw_handler (struct widget *widget, void *data)
 	cairo_text_extents_t extents;
 	cairo_text_extents_t leftp_extents;
 	char *leftp_text;
+	int char_pos;
 
 	widget_get_allocation (widget, &allocation);
 
@@ -473,6 +474,11 @@ entry_redraw_handler (struct widget *widget, void *data)
 	                        CAIRO_FONT_WEIGHT_NORMAL);
 	cairo_set_font_size (cr, 14);
 	cairo_text_extents (cr, entry->text, &extents);
+			char_pos = strlen(entry->text) -1;						/* for spaces at the end */
+			while (char_pos >= 0 && entry->text[char_pos] == ' ') {
+				extents.width += 5.0;
+				char_pos--;
+			}
 	cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2,
 	        	   allocation.y + (allocation.height - extents.height)/2 + 10);
 	cairo_show_text (cr, entry->text);
@@ -482,6 +488,11 @@ entry_redraw_handler (struct widget *widget, void *data)
 		strncpy (leftp_text, entry->text, entry->cursor_pos);
 		leftp_text[entry->cursor_pos] = '\0';
 		cairo_text_extents (cr, leftp_text, &leftp_extents);
+			char_pos = strlen(leftp_text) -1;
+			while (char_pos >= 0 && leftp_text[char_pos] == ' ') {
+				leftp_extents.width += 5.0;
+				char_pos--;
+			}
 		free (leftp_text);
 
 		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2 + leftp_extents.width,
@@ -511,7 +522,7 @@ resize_handler (struct widget *widget, int32_t width, int32_t height, void *data
 	if (message_window->entry) {
 		entry = message_window->entry;
 		widget_set_allocation (entry->widget, x, allocation.y + height - 16*2 - 32*2,
-		                                      200, 32);
+		                                      240, 32);
 	}
 
 	buttons_width = 0;
@@ -582,6 +593,7 @@ redraw_handler (struct widget *widget, void *data)
 	        	           allocation.y + (allocation.height - lines_nb * extents.height)/2
 		                                + i*(extents.height+10)
 		                                + (!message_window->icon ? 0 : 32)
+                                                - (!message_window->entry ? 0 : 32)
                                                 - (!message_window->buttons_nb ? 0 : 32));
 		cairo_show_text (cr, lines[i]);
 	}
@@ -646,6 +658,8 @@ key_handler (struct window *window, struct input *input, uint32_t time,
 				if (strlen(entry->text) >= 18)
 					break;
 				if (xkb_keysym_to_utf8 (sym, text, sizeof(text)) <= 0)
+					break;
+				if (strlen(text) > 1)	/* dismiss non-ASCII characters for now */
 					break;
 				new_text = malloc (strlen(entry->text) + strlen(text) + 1);
 				strncpy (new_text, entry->text, entry->cursor_pos);
