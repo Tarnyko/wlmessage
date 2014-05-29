@@ -40,6 +40,7 @@ struct entry {
 	char *text;
 	int cursor_pos;
 	int cursor_anchor;
+	int last_vkb_len;
 };
 
 void message_window_destroy ();
@@ -129,10 +130,18 @@ text_input_preedit_string(void *data,
 	struct entry *entry = data;
 	char *new_text;
 
-	if (entry->cursor_pos >= 20)
+	if (strlen(entry->text) >= 18)
 		return;
 
-	new_text = malloc (strlen(entry->text) + 1);
+	 /* workaround to prevent using Backspace for now */
+	if (strlen(text) < entry->last_vkb_len) {
+		entry->last_vkb_len = strlen(text);
+		return;
+	} else {
+		entry->last_vkb_len = strlen(text);
+	}
+
+	new_text = malloc (strlen(entry->text) + 1 + 1);
 	strncpy (new_text, entry->text, entry->cursor_pos);
 	strcpy (new_text+entry->cursor_pos, text+(strlen(text)-1));
 	strcpy (new_text+entry->cursor_pos+1, entry->text+entry->cursor_pos);
@@ -185,15 +194,40 @@ text_input_keysym(void *data,
                   uint32_t modifiers)
 {
 	struct entry *entry = data;
+	char *new_text;
 
 	if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
 		return;
 
-	if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+	 /* use Tab as Backspace until I figure this out */
+	if (sym == XKB_KEY_Tab) {
+		if (entry->cursor_pos != 0) {
+			new_text = malloc (strlen(entry->text));
+			strncpy (new_text, entry->text, entry->cursor_pos - 1);
+			strcpy (new_text+entry->cursor_pos-1, entry->text+entry->cursor_pos);
+			free (entry->text);
+			entry->text = new_text;
+			entry->cursor_pos--;
+		}
+	}	
+
+	if (sym == XKB_KEY_Left) {
+		if (entry->cursor_pos != 0)
+			entry->cursor_pos--;
+	}
+
+	if (sym == XKB_KEY_Right) {
+		if (entry->cursor_pos != strlen (entry->text))
+			entry->cursor_pos++;
+	}
+
+	if (sym == XKB_KEY_Return) {
 		fprintf (stdout, entry->text);
 		message_window_destroy ();
 		exit (default_value);
 	}
+
+	widget_schedule_redraw (entry->widget);
 }
 
 static void
@@ -407,6 +441,8 @@ entry_redraw_handler (struct widget *widget, void *data)
 	struct rectangle allocation;
 	cairo_t *cr;
 	cairo_text_extents_t extents;
+	cairo_text_extents_t leftp_extents;
+	char *leftp_text;
 
 	widget_get_allocation (widget, &allocation);
 
@@ -442,9 +478,15 @@ entry_redraw_handler (struct widget *widget, void *data)
 	cairo_show_text (cr, entry->text);
 
 	if (entry->active) {
-		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2 + 10*entry->cursor_pos,
+		leftp_text = malloc (entry->cursor_pos + 1);
+		strncpy (leftp_text, entry->text, entry->cursor_pos);
+		leftp_text[entry->cursor_pos] = '\0';
+		cairo_text_extents (cr, leftp_text, &leftp_extents);
+		free (leftp_text);
+
+		cairo_move_to (cr, allocation.x + (allocation.width - extents.width)/2 + leftp_extents.width,
 		        	   allocation.y + (allocation.height - extents.height)/2 + 15);
-		cairo_line_to(cr, allocation.x + (allocation.width - extents.width)/2 + 10*entry->cursor_pos,
+		cairo_line_to(cr, allocation.x + (allocation.width - extents.width)/2 + leftp_extents.width,
 		        	   allocation.y + (allocation.height - extents.height)/2 - 5);
 		cairo_stroke(cr);
 	}
@@ -574,7 +616,7 @@ key_handler (struct window *window, struct input *input, uint32_t time,
 			case XKB_KEY_BackSpace:
 				if (entry->cursor_pos == 0)
 					break;
-				new_text = malloc (strlen(entry->text) - 1);
+				new_text = malloc (strlen(entry->text));
 				strncpy (new_text, entry->text, entry->cursor_pos - 1);
 				strcpy (new_text+entry->cursor_pos-1, entry->text+entry->cursor_pos);
 				free (entry->text);
@@ -584,11 +626,12 @@ key_handler (struct window *window, struct input *input, uint32_t time,
 			case XKB_KEY_Delete:
 				if (entry->cursor_pos == strlen (entry->text))
 					break;
-				new_text = malloc (strlen(entry->text) - 1);
+				new_text = malloc (strlen(entry->text));
 				strncpy (new_text, entry->text, entry->cursor_pos);
 				strcpy (new_text+entry->cursor_pos, entry->text+entry->cursor_pos+1);
 				free (entry->text);
 				entry->text = new_text;
+				break;
 			case XKB_KEY_Left:
 				if (entry->cursor_pos != 0)
 					entry->cursor_pos--;
@@ -600,11 +643,11 @@ key_handler (struct window *window, struct input *input, uint32_t time,
 			case XKB_KEY_Tab:
 				break;
 			default:
-				if (entry->cursor_pos >= 20)
+				if (strlen(entry->text) >= 18)
 					break;
 				if (xkb_keysym_to_utf8 (sym, text, sizeof(text)) <= 0)
 					break;
-				new_text = malloc (strlen(entry->text) + 1);
+				new_text = malloc (strlen(entry->text) + strlen(text) + 1);
 				strncpy (new_text, entry->text, entry->cursor_pos);
 				strcpy (new_text+entry->cursor_pos, text);
 				strcpy (new_text+entry->cursor_pos+strlen(text), entry->text+entry->cursor_pos);
@@ -626,6 +669,7 @@ message_window_add_entry (char *textfield)
 	entry->text = strdup (textfield);
 	entry->cursor_pos = strlen (entry->text);
 	entry->cursor_anchor = entry->cursor_pos;
+	entry->last_vkb_len = 0;
 	entry->active = 0;
 
 	message_window->entry = entry;
