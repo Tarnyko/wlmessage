@@ -1,0 +1,5 @@
+ - enlarge the text field, or find a way to make the text
+   scroll therein ;
+ - the "Backspace" key of the virtual keyboard doesn't work
+   yet. Use "Tab" instead, until I rework the whole input
+   code.
