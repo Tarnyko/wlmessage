@@ -22,8 +22,6 @@
  * OF THIS SOFTWARE.
  */
 
-//#include "config.h"
-
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-util.h>
@@ -108,13 +106,15 @@ frame_button_create(struct frame *frame, const char *icon,
 		    enum frame_button_flags flags)
 {
 	struct frame_button *button;
+	cairo_status_t status;
 
 	button = calloc(1, sizeof *button);
 	if (!button)
 		return NULL;
 
 	button->icon = cairo_image_surface_create_from_png(icon);
-	if (!button->icon) {
+	status = cairo_surface_status(button->icon);
+	if ((!button->icon) || (status != CAIRO_STATUS_SUCCESS)) {
 		free(button);
 		return NULL;
 	}
@@ -329,41 +329,33 @@ frame_create(struct theme *t, int32_t width, int32_t height, uint32_t resizable,
 
 	if (title) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/icon_window.png",
+					     DATADIR "/wlmessage/icon_window.png",
 					     FRAME_STATUS_MENU,
 					     FRAME_BUTTON_CLICK_DOWN);
-		if (!button)
-			goto free_frame;
 	}
 
 	if (buttons & FRAME_BUTTON_CLOSE) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/sign_close.png",
+					     DATADIR "/wlmessage/sign_close.png",
 					     FRAME_STATUS_CLOSE,
 					     FRAME_BUTTON_ALIGN_RIGHT |
 					     FRAME_BUTTON_DECORATED);
-		if (!button)
-			goto free_frame;
 	}
 
 	if (buttons & FRAME_BUTTON_MAXIMIZE) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/sign_maximize.png",
+					     DATADIR "/wlmessage/sign_maximize.png",
 					     FRAME_STATUS_MAXIMIZE,
 					     FRAME_BUTTON_ALIGN_RIGHT |
 					     FRAME_BUTTON_DECORATED);
-		if (!button)
-			goto free_frame;
 	}
 
 	if (buttons & FRAME_BUTTON_MINIMIZE) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/sign_minimize.png",
+					     DATADIR "/wlmessage/sign_minimize.png",
 					     FRAME_STATUS_MINIMIZE,
 					     FRAME_BUTTON_ALIGN_RIGHT |
 					     FRAME_BUTTON_DECORATED);
-		if (!button)
-			goto free_frame;
 	}
 
 	return frame;

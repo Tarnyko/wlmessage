@@ -28,3 +28,12 @@ wlmessage_SOURCES =					\
 	toytoolkit/text-protocol.c			\
 	toytoolkit/workspaces-protocol.c		\
 	toytoolkit/window.c
+
+wlmessagedatadir = $(datadir)/wlmessage
+dist_wlmessagedata_DATA =				\
+	toytoolkit/data/icon_window.png			\
+	toytoolkit/data/sign_close.png			\
+	toytoolkit/data/sign_maximize.png		\
+	toytoolkit/data/sign_minimize.png
+
+
