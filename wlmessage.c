@@ -517,7 +517,7 @@ resize_handler (struct widget *widget, int32_t width, int32_t height, void *data
 
 	widget_get_allocation (widget, &allocation);
 
-	x = allocation.x + (width - 200)/2;
+	x = allocation.x + (width - 240)/2;
 
 	if (message_window->entry) {
 		entry = message_window->entry;

@@ -1,0 +1,47 @@
+
+wlmessage 0.1
+-------------
+ Tarnyko <tarnyko@tarnyko.net>
+
+ Description :
+ ***********
+  wlmessage is a Wayland equivalent of xmessage for X11 ;
+it is a toolkit-independant util which allows displaying
+a message window (eventually with an icon), and returns 
+the user input on buttons and text areas.
+
+  It is especially useful for scripts. The program returns
+a value matching the clicked button (use "echo $?"), and
+eventually sends the text area content to stdout.
+
+ Installation :
+ ************
+$ autoreconf --install
+$ ./configure --disable-egl
+$ make
+$ make install
+
+ Usage :
+ *****
+$ wlmessage "Where do you want to install this application ?"
+ -title "Installer" -textfield "/usr/local/app"
+ -buttons Ok:1,Cancel:0 -default Cancel
+ -icon app.png -timeout 30
+
+  This command will return 1 or 0 depending on the clicked
+button, 0 (Cancel) being the default is the user presses
+[Enter]. "/usr/local/app" or any other entered text will
+be sent to stdout. The window will vanish and return 0 after
+30 seconds.
+
+ License :
+ *******
+  wlmessage is under the MIT license. It contains some code
+taken from Weston in "toytoolkit", which is also under the
+MIT license (see "toytoolkit/COPYING").
+
+ Requirements :
+ ***********
+GLib, Libxkbcommon, LibPNG, Cairo, EGL/GLESv2 (optional).
+Wayland >= 1.2.0. Has been tested with Weston 1.5.0.
+
