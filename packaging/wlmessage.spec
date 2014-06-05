@@ -54,5 +54,6 @@ make %{?_smp_mflags}
 %defattr(-,root,root)
 %license COPYING
 %{_bindir}/wlmessage
+%{_datadir}/wlmessage
 
 %changelog
