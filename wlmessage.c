@@ -737,6 +737,7 @@ message_window_create (struct display *display, char *message, char *title, char
 
 	message_window = xzalloc (sizeof *message_window);
 	message_window->window = window_create (display);
+	window_set_fullscreen (message_window->window, 1);
 	message_window->widget = window_frame_create (message_window->window, frame_type, !noresize,  message_window);
 
 	message_window->message = message;

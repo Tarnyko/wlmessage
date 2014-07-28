@@ -90,6 +90,7 @@ struct display {
 	struct text_cursor_position *text_cursor_position;
 	struct workspace_manager *workspace_manager;
 	struct xdg_shell *xdg_shell;
+	struct xdg_surface *xdg_surface;
 	EGLDisplay dpy;
 	EGLConfig argb_config;
 	EGLContext argb_ctx;
@@ -4414,6 +4415,8 @@ window_create(struct display *display)
 					  window->main_surface->surface);
 	fail_on_null(window->xdg_surface);
 
+	display->xdg_surface = window->xdg_surface;
+
 	xdg_surface_set_user_data(window->xdg_surface, window);
 	xdg_surface_add_listener(window->xdg_surface,
 				 &xdg_surface_listener, window);
@@ -5568,7 +5571,7 @@ display_run(struct display *display)
 			gettimeofday(&current_time, NULL);
 
 			if ((current_time.tv_sec - display->time.tv_sec) >= display->timeout)
-				return;
+				xdg_surface_set_minimized(display->xdg_surface);
 		}
 
 		wl_display_dispatch_pending(display->display);
