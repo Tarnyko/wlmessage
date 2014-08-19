@@ -607,6 +607,14 @@ redraw_handler (struct widget *widget, void *data)
 }
 
 static void
+keyboard_focus_handler (struct window *window, struct input *input, void *data)
+{
+	struct message_window *message_window = data;
+
+	window_schedule_redraw (message_window->window);
+}
+
+static void
 key_handler (struct window *window, struct input *input, uint32_t time,
 		 uint32_t key, uint32_t sym, enum wl_keyboard_key_state state,
 		 void *data)
@@ -804,6 +812,7 @@ message_window_create (struct display *display, char *message, char *title, char
 	lines_nb = get_number_of_lines (message);
 
 	window_set_user_data (message_window->window, message_window);
+	window_set_keyboard_focus_handler (message_window->window, keyboard_focus_handler);
 	window_set_key_handler (message_window->window, key_handler);
 	widget_set_redraw_handler (message_window->widget, redraw_handler);
 	widget_set_resize_handler (message_window->widget, resize_handler);
