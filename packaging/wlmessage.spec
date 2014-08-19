@@ -2,14 +2,14 @@
 
 Name:           wlmessage
 Version:        0.1
-Release:        1
-Summary:        A tool to display messages or dialog boxes under Wayland
+Release:        0
+Summary:        A tool to display interactive dialog boxes under Wayland
 License:        MIT
 Group:          Graphics & UI Framework/Wayland Window System
 Url:            https://github.com/Tarnyko/wlmessage.git
 
-Source0:         %name-%version.tar.xz
-Source1: 	wlmessage.manifest
+Source0:        %name-%version.tar.xz
+Source1:        %name.manifest
 BuildRequires:	autoconf >= 2.64, automake >= 1.11
 BuildRequires:  libtool >= 2.2
 BuildRequires:  libjpeg-devel
@@ -34,7 +34,7 @@ ExclusiveArch:
 %endif
 
 %description
-A tool to display messages or dialog boxes under Wayland.
+wlmessage is a very tiny and toolkit-independent tool, following the "xmessage" syntax and able to display interactive dialog boxes under Wayland.
 
 %prep
 %setup -q
