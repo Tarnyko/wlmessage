@@ -34,6 +34,13 @@ AC_SUBST(DLOPEN_LIBS)
 
 AC_CHECK_FUNCS([mkostemp strchrnul initgroups posix_fallocate])
 
+AC_ARG_ENABLE(xdg-shell, [  --enable-xdg-shell],,
+              enable_xdg_shell=no)
+AM_CONDITIONAL(ENABLE_XDG_SHELL, test x$enable_xdg_shell = xyes)
+if test x$enable_xdg_shell = xyes; then
+	AC_DEFINE([ENABLE_XDG_SHELL], [1], [Build with XDG-Shell support])
+fi
+
 AC_ARG_ENABLE(egl, [  --disable-egl],,
               enable_egl=yes)
 AM_CONDITIONAL(ENABLE_EGL, test x$enable_egl = xyes)

@@ -41,7 +41,7 @@ wlmessage is a very tiny and toolkit-independent tool, following the "xmessage" 
 cp %{SOURCE1} .
 
 %build
-%reconfigure
+%reconfigure --enable-xdg-shell
 make %{?_smp_mflags}
 
 %install
