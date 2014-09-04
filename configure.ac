@@ -34,15 +34,19 @@ AC_SUBST(DLOPEN_LIBS)
 
 AC_CHECK_FUNCS([mkostemp strchrnul initgroups posix_fallocate])
 
-AC_ARG_ENABLE(xdg-shell, [  --enable-xdg-shell],,
-              enable_xdg_shell=no)
+AC_ARG_ENABLE(xdg-shell,
+              AS_HELP_STRING([--enable-xdg-shell],
+                             [build with XDG-Shell support (Weston 1.5.0)]),
+                             [],[enable_xdg_shell=no])
 AM_CONDITIONAL(ENABLE_XDG_SHELL, test x$enable_xdg_shell = xyes)
 if test x$enable_xdg_shell = xyes; then
 	AC_DEFINE([ENABLE_XDG_SHELL], [1], [Build with XDG-Shell support])
 fi
 
-AC_ARG_ENABLE(egl, [  --disable-egl],,
-              enable_egl=yes)
+AC_ARG_ENABLE(egl,
+              AS_HELP_STRING([--disable-egl],
+                             [do not build with EGL support]),
+                             [],[enable_egl=yes])
 AM_CONDITIONAL(ENABLE_EGL, test x$enable_egl = xyes)
 if test x$enable_egl = xyes; then
 	AC_DEFINE([ENABLE_EGL], [1], [Build with EGL support])
@@ -51,7 +55,7 @@ fi
 
 AC_ARG_WITH(cairo,
 	    AS_HELP_STRING([--with-cairo=@<:@image|glesv2@:>@]
-			   [Which Cairo renderer to use for the clients]),
+			  [which Cairo renderer to use for the clients]),
 			   [],[with_cairo="image"])
 
 if test "x$with_cairo" = "ximage"; then
@@ -67,7 +71,7 @@ fi
 # Included for legacy compat
 AC_ARG_WITH(cairo-glesv2,
             AS_HELP_STRING([--with-cairo-glesv2],
-                           [Use GLESv2 cairo]))
+                           [use GLESv2 cairo]))
 if test "x$with_cairo_glesv2" = "xyes"; then
   cairo_modules="cairo-glesv2"
   with_cairo="glesv2"
